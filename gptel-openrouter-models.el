@@ -9,21 +9,21 @@
 
 ;;; Commentary:
 
-;; OpenRouter の `/api/v1/models' を取得し、`completing-read'
-;; (vertico 等が自動でフックする標準UI)でモデルを選んで
-;; `gptel-model' に設定するための小さなパッケージ。
+;; A small package that fetches OpenRouter's `/api/v1/models', lets you
+;; pick a model via `completing-read' (the standard UI that vertico and
+;; friends hook into automatically), and sets `gptel-model' to it.
 ;;
-;; モデル一覧の取得に API キーは不要(OpenRouter の /models は
-;; 公開エンドポイント)。候補の見た目は completing-read の
-;; フロントエンド(vertico / marginalia 等)の整形にまかせる設計で、
-;; 説明文は `completion-extra-properties' の annotation-function
-;; 経由で渡すのみ。
+;; No API key is needed to fetch the model list (OpenRouter's /models is
+;; a public endpoint).  The appearance of candidates is left to the
+;; completing-read frontend (vertico / marginalia etc.) for formatting;
+;; descriptions are only passed through the annotation-function of
+;; `completion-extra-properties'.
 ;;
-;; 使い方:
+;; Usage:
 ;;   M-x gptel-openrouter-models-pick
 ;;
-;; 事前に `gptel-backend' を OpenRouter 用の `gptel-make-openai'
-;; バックエンドにしておくこと。詳細は README.md を参照。
+;; Set up `gptel-backend' as a `gptel-make-openai' backend for
+;; OpenRouter beforehand.  See README.md for details.
 
 ;;; Code:
 
@@ -36,12 +36,12 @@
   :group 'gptel)
 
 (defcustom gptel-openrouter-models-endpoint "https://openrouter.ai/api/v1/models"
-  "OpenRouter のモデル一覧APIエンドポイント。"
+  "OpenRouter model-list API endpoint."
   :type 'string
   :group 'gptel-openrouter-models)
 
 (defcustom gptel-openrouter-models-timeout 15
-  "モデル一覧取得のタイムアウト秒数。"
+  "Timeout in seconds for fetching the model list."
   :type 'integer
   :group 'gptel-openrouter-models)
 
@@ -53,13 +53,13 @@ description is visually distinct from the model ID itself."
   :group 'gptel-openrouter-models)
 
 (defun gptel-openrouter-models--fetch-raw ()
-  "OpenRouter の /models を取得し、data 配列(alistのリスト)を返す。"
+  "Fetch OpenRouter's /models and return the data array (a list of alists)."
   (with-current-buffer (url-retrieve-synchronously
                          gptel-openrouter-models-endpoint
                          t t gptel-openrouter-models-timeout)
     (goto-char (point-min))
     (unless (search-forward "\n\n" nil t)
-      (error "gptel-openrouter-models: HTTPヘッダの終端が見つかりません"))
+      (error "gptel-openrouter-models: could not find end of HTTP headers"))
     (let* ((json-object-type 'alist)
            (json-array-type 'list)
            (parsed (json-read)))
@@ -67,17 +67,17 @@ description is visually distinct from the model ID itself."
       (alist-get 'data parsed))))
 
 (defun gptel-openrouter-models--id (model)
-  "MODEL alist からモデルIDを取り出す。"
+  "Extract the model ID from the MODEL alist."
   (alist-get 'id model))
 
 (defun gptel-openrouter-models--description (model)
-  "MODEL alist から説明文を取り出す。無ければ nil。"
+  "Extract the description from the MODEL alist, or nil if absent."
   (alist-get 'description model))
 
 (defun gptel-openrouter-models-list (&optional prefix)
-  "OpenRouter のモデル一覧を取得し、ID順にソートして返す。
-PREFIX が非nilなら、そのプレフィックスに一致するモデルIDのみに絞る
-(例: \"anthropic/\")。"
+  "Fetch the OpenRouter model list and return it sorted by ID.
+If PREFIX is non-nil, keep only model IDs matching that prefix
+(e.g. \"anthropic/\")."
   (let* ((models (gptel-openrouter-models--fetch-raw))
          (filtered (if prefix
                        (seq-filter (lambda (m)
@@ -91,14 +91,15 @@ PREFIX が非nilなら、そのプレフィックスに一致するモデルID�
 
 ;;;###autoload
 (defun gptel-openrouter-models-pick (&optional prefix)
-  "OpenRouter のモデルから選んで `gptel-model' に設定する。
-PREFIX を渡すと、そのプレフィックスに一致するモデルだけに絞って検索する
-(例えば \"anthropic/\" など)。対話的に呼んだ場合はプレフィックス絞り込み
-なしで全モデルを対象にする。
+  "Pick a model from OpenRouter and set `gptel-model' to it.
+If PREFIX is given, narrow the search to models matching that prefix
+(e.g. \"anthropic/\").  When called interactively, all models are
+considered without any prefix filtering.
 
-候補の選択自体は `completing-read' に委ねているので、vertico などの
-補完フロントエンドが自動でUIを提供する。説明文は候補文字列に含めず
-annotation-function 経由で渡すため、marginalia 等の整形もそのまま効く。"
+Candidate selection is delegated to `completing-read', so completion
+frontends such as vertico provide the UI automatically.  Descriptions
+are not included in the candidate strings but passed through the
+annotation-function, so formatting by marginalia etc. still works."
   (interactive)
   (message "Fetching OpenRouter model list...")
   (let* ((models (gptel-openrouter-models-list prefix))
