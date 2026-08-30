@@ -11,7 +11,8 @@
 
 ;; A small package that fetches OpenRouter's `/api/v1/models', lets you
 ;; pick a model via `completing-read' (the standard UI that vertico and
-;; friends hook into automatically), and sets `gptel-model' to it.
+;; friends hook into automatically), and either sets `gptel-model' to it
+;; or copies its name to the kill ring.
 ;;
 ;; No API key is needed to fetch the model list (OpenRouter's /models is
 ;; a public endpoint).  The appearance of candidates is left to the
@@ -21,6 +22,15 @@
 ;;
 ;; Usage:
 ;;   M-x gptel-openrouter-models-pick
+;;   M-x gptel-openrouter-models-copy-name
+;;
+;; `gptel-openrouter-models-copy-name' picks a model the same way but,
+;; instead of touching `gptel-model', copies just the bare model name
+;; (the part after the "owner/" prefix, e.g. "gemini-2.5-flash" from
+;; "google/gemini-2.5-flash") to the kill ring.  This is handy when you
+;; want to paste the name into a native (non-OpenRouter) gptel backend
+;; for Gemini, Anthropic, OpenAI, etc.  With a prefix argument it copies
+;; the full model ID instead.
 ;;
 ;; Set up `gptel-backend' as a `gptel-make-openai' backend for
 ;; OpenRouter beforehand.  See README.md for details.
@@ -29,6 +39,8 @@
 
 (require 'url)
 (require 'json)
+(require 'seq)
+(require 'subr-x)                        ; `when-let*' on Emacs 27/28
 (require 'gptel)
 
 (defgroup gptel-openrouter-models nil
@@ -74,6 +86,14 @@ description is visually distinct from the model ID itself."
   "Extract the description from the MODEL alist, or nil if absent."
   (alist-get 'description model))
 
+(defun gptel-openrouter-models--bare-name (id)
+  "Return the bare model name for ID, stripping any \"owner/\" prefix.
+For example \"google/gemini-2.5-flash\" becomes \"gemini-2.5-flash\".
+An ID without a slash is returned unchanged."
+  (if (string-match "\\`[^/]+/\\(.+\\)\\'" id)
+      (match-string 1 id)
+    id))
+
 (defun gptel-openrouter-models-list (&optional prefix)
   "Fetch the OpenRouter model list and return it sorted by ID.
 If PREFIX is non-nil, keep only model IDs matching that prefix
@@ -89,18 +109,13 @@ If PREFIX is non-nil, keep only model IDs matching that prefix
                      (string< (gptel-openrouter-models--id a)
                               (gptel-openrouter-models--id b))))))
 
-;;;###autoload
-(defun gptel-openrouter-models-pick (&optional prefix)
-  "Pick a model from OpenRouter and set `gptel-model' to it.
-If PREFIX is given, narrow the search to models matching that prefix
-(e.g. \"anthropic/\").  When called interactively, all models are
-considered without any prefix filtering.
-
-Candidate selection is delegated to `completing-read', so completion
-frontends such as vertico provide the UI automatically.  Descriptions
-are not included in the candidate strings but passed through the
-annotation-function, so formatting by marginalia etc. still works."
-  (interactive)
+(defun gptel-openrouter-models--read (prompt &optional prefix)
+  "Fetch the model list and `completing-read' one ID, using PROMPT.
+PROMPT is passed through `format' with the candidate count as its only
+argument.  If PREFIX is non-nil, only IDs matching that prefix are
+offered (e.g. \"anthropic/\").  Descriptions are shown through the
+completion annotation-function.  Return the selected ID string, or nil
+when no models are available."
   (message "Fetching OpenRouter model list...")
   (let* ((models (gptel-openrouter-models-list prefix))
          (desc-table (make-hash-table :test 'equal))
@@ -118,12 +133,45 @@ annotation-function, so formatting by marginalia etc. still works."
                       (propertize (concat "  " desc)
                                   'face 'gptel-openrouter-models-annotation-face)))))))
     (if (null ids)
-        (message "No models found")
-      (let ((model-id (completing-read
-                        (format "Select OpenRouter model (%d): " (length ids))
-                        ids nil t)))
-        (setq gptel-model (intern model-id))
-        (message "gptel-model set to %s" model-id)))))
+        (progn (message "No models found") nil)
+      (completing-read (format prompt (length ids)) ids nil t))))
+
+;;;###autoload
+(defun gptel-openrouter-models-pick (&optional prefix)
+  "Pick a model from OpenRouter and set `gptel-model' to it.
+If PREFIX is given, narrow the search to models matching that prefix
+(e.g. \"anthropic/\").  When called interactively, all models are
+considered without any prefix filtering.
+
+Candidate selection is delegated to `completing-read', so completion
+frontends such as vertico provide the UI automatically.  Descriptions
+are not included in the candidate strings but passed through the
+annotation-function, so formatting by marginalia etc. still works."
+  (interactive)
+  (when-let* ((model-id (gptel-openrouter-models--read
+                        "Select OpenRouter model (%d): " prefix)))
+    (setq gptel-model (intern model-id))
+    (message "gptel-model set to %s" model-id)))
+
+;;;###autoload
+(defun gptel-openrouter-models-copy-name (&optional full prefix)
+  "Pick a model from OpenRouter and copy its name to the kill ring.
+By default the bare model name is copied, i.e. the part after the
+\"owner/\" prefix is stripped (\"google/gemini-2.5-flash\" becomes
+\"gemini-2.5-flash\").  This is what native gptel backends for Gemini,
+Anthropic, OpenAI, etc. expect.
+
+With a prefix argument (FULL non-nil), copy the full model ID instead.
+
+PREFIX, when non-nil, narrows the search to model IDs matching it
+(e.g. \"anthropic/\")."
+  (interactive "P")
+  (when-let* ((model-id (gptel-openrouter-models--read
+                        "Copy OpenRouter model name (%d): " prefix)))
+    (let ((name (if full model-id
+                  (gptel-openrouter-models--bare-name model-id))))
+      (kill-new name)
+      (message "Copied to kill ring: %s" name))))
 
 (provide 'gptel-openrouter-models)
 ;;; gptel-openrouter-models.el ends here

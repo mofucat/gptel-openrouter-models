@@ -13,7 +13,10 @@ plain Emacs completion.
   model ID whether or not you use
   [marginalia](https://github.com/minad/marginalia). Customize that face
   if you want a different color/weight.
-- Only one command to remember: `gptel-openrouter-models-pick`.
+- Two commands: `gptel-openrouter-models-pick` (set `gptel-model`) and
+  `gptel-openrouter-models-copy-name` (copy just the bare model name to
+  the kill ring, e.g. `gemini-2.5-flash` from `google/gemini-2.5-flash`
+  — what native gptel backends for Gemini / Anthropic / OpenAI expect).
 
 ## Installation
 
@@ -88,6 +91,27 @@ Then:
 
 The command only changes `gptel-model`; it doesn't switch `gptel-backend`
 for you.
+
+### Copying a model name
+
+- `M-x gptel-openrouter-models-copy-name` — pick a model the same way,
+  but instead of touching `gptel-model` it copies the **bare** model
+  name to the kill ring: the `owner/` prefix is stripped, so
+  `google/gemini-2.5-flash` becomes `gemini-2.5-flash`. That is the form
+  a native (non-OpenRouter) gptel backend for Gemini, Anthropic, OpenAI,
+  etc. expects, so you can just `C-y` it into your config.
+- With a prefix argument (`C-u M-x gptel-openrouter-models-copy-name`) it
+  copies the full model ID unchanged.
+
+## Development
+
+```sh
+make test      # run the ERT suite (no network; gptel is stubbed if absent)
+make compile   # byte-compile with warnings treated as errors
+```
+
+The tests stub `gptel-openrouter-models--fetch-raw`, so they never hit
+the network.
 
 ## License
 
