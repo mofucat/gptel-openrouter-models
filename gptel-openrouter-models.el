@@ -45,6 +45,13 @@
   :type 'integer
   :group 'gptel-openrouter-models)
 
+(defface gptel-openrouter-models-annotation-face
+  '((t :inherit completions-annotations))
+  "Face used for the model description shown next to each candidate.
+Defaults to `completions-annotations' (typically dimmed/italic), so the
+description is visually distinct from the model ID itself."
+  :group 'gptel-openrouter-models)
+
 (defun gptel-openrouter-models--fetch-raw ()
   "OpenRouter の /models を取得し、data 配列(alistのリスト)を返す。"
   (with-current-buffer (url-retrieve-synchronously
@@ -106,7 +113,9 @@ annotation-function 経由で渡すため、marginalia 等の整形もそのま�
           (list :annotation-function
                 (lambda (id)
                   (let ((desc (gethash id desc-table)))
-                    (when desc (concat "  " desc)))))))
+                    (when desc
+                      (propertize (concat "  " desc)
+                                  'face 'gptel-openrouter-models-annotation-face)))))))
     (if (null ids)
         (message "No models found")
       (let ((model-id (completing-read

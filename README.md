@@ -7,9 +7,12 @@ plain Emacs completion.
 - Fetches the live model list from OpenRouter's public `/api/v1/models`
   endpoint. No API key is needed just to list models.
 - Descriptions are passed via `completion-extra-properties`
-  (`:annotation-function`), so they show up nicely if you use
-  [marginalia](https://github.com/minad/marginalia), without hardcoding any
-  formatting into the candidate strings.
+  (`:annotation-function`) and propertized with the
+  `gptel-openrouter-models-annotation-face` face (defaults to
+  `completions-annotations`), so they stay visually distinct from the
+  model ID whether or not you use
+  [marginalia](https://github.com/minad/marginalia). Customize that face
+  if you want a different color/weight.
 - Only one command to remember: `gptel-openrouter-models-pick`.
 
 ## Installation
