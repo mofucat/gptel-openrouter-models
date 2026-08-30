@@ -28,9 +28,7 @@ plain Emacs completion.
                      :endpoint "/api/v1/chat/completions"
                      :stream t
                      :key (gptel-api-key-from-environment "OPENROUTER_API_KEY")
-                     :models '(meta-llama/llama-3.3-70b-instruct:free)))
-  :bind
-  ("C-c g m" . gptel-openrouter-models-pick))
+                     :models '(openrouter/free))))
 ```
 
 ### straight.el + use-package
@@ -40,8 +38,7 @@ plain Emacs completion.
   :straight (gptel-openrouter-models
              :type git :host github
              :repo "mofucat/gptel-openrouter-models")
-  :after gptel
-  :bind ("C-c g m" . gptel-openrouter-models-pick))
+  :after gptel)
 ```
 
 ### package-vc.el (built into Emacs 29+, no straight.el required)
@@ -51,8 +48,7 @@ plain Emacs completion.
   (package-vc-install "https://github.com/mofucat/gptel-openrouter-models"))
 
 (use-package gptel-openrouter-models
-  :after gptel
-  :bind ("C-c g m" . gptel-openrouter-models-pick))
+  :after gptel)
 ```
 
 ### Manual (package.el, no MELPA needed)
@@ -75,7 +71,7 @@ You need a gptel backend for OpenRouter already configured, e.g.:
         :endpoint "/api/v1/chat/completions"
         :stream t
         :key (gptel-api-key-from-environment "OPENROUTER_API_KEY")
-        :models '(meta-llama/llama-3.3-70b-instruct:free))) ; placeholder
+        :models '(openrouter/free))) ; placeholder, run gptel-openrouter-models-pick to change it
 
 (setq gptel-backend my/openrouter-backend)
 ```
