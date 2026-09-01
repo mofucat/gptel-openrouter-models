@@ -118,14 +118,27 @@
     (insert "HTTP/1.1 200 OK just headers, no body separator")
     (defvar url-http-end-of-headers)
     (let ((url-http-end-of-headers nil))
-      (should-error (gptel-openrouter-models--parse-buffer)))))
+      (should-error (gptel-openrouter-models--parse-buffer)
+                    :type 'gptel-openrouter-models-error))))
 
 (ert-deftest gptel-openrouter-models-test-fetch-raw-errors-on-nil-buffer ()
   "A nil return from `url-retrieve-synchronously' (timeout/failure) errors clearly."
   (cl-letf (((symbol-function 'url-retrieve-synchronously)
              (lambda (&rest _) nil)))
-    (let ((err (should-error (gptel-openrouter-models--fetch-raw) :type 'error)))
+    (let ((err (should-error (gptel-openrouter-models--fetch-raw)
+                             :type 'gptel-openrouter-models-error)))
       (should (string-match-p "timeout or connection failure"
+                              (error-message-string err))))))
+
+(ert-deftest gptel-openrouter-models-test-fetch-raw-wraps-signalled-errors ()
+  "A signalled network error (e.g. DNS failure) becomes a package error."
+  (cl-letf (((symbol-function 'url-retrieve-synchronously)
+             (lambda (&rest _)
+               (signal 'file-error
+                       '("openrouter.ai/443" "nodename nor servname provided")))))
+    (let ((err (should-error (gptel-openrouter-models--fetch-raw)
+                             :type 'gptel-openrouter-models-error)))
+      (should (string-match-p "nodename nor servname provided"
                               (error-message-string err))))))
 
 ;;; -list
