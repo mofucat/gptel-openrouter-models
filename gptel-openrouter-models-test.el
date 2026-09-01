@@ -75,6 +75,59 @@
     (should (equal (gptel-openrouter-models--description m) "desc")))
   (should (null (gptel-openrouter-models--description '((id . "x"))))))
 
+;;; --parse-buffer / --fetch-raw
+
+(defvar gptel-openrouter-models-test--json-body
+  "{\"data\":[{\"id\":\"openai/gpt-4o\",\"description\":\"omni\"},\
+{\"id\":\"anthropic/claude-3.5-sonnet\"}]}"
+  "A minimal OpenRouter /models JSON payload.")
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-crlf-headers ()
+  "RFC-style CRLF header terminator is handled."
+  (with-temp-buffer
+    (insert "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
+            gptel-openrouter-models-test--json-body)
+    (should (equal (mapcar (lambda (m) (alist-get 'id m))
+                           (gptel-openrouter-models--parse-buffer))
+                   '("openai/gpt-4o" "anthropic/claude-3.5-sonnet")))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-lf-headers ()
+  "Bare-LF header terminator still works."
+  (with-temp-buffer
+    (insert "HTTP/1.1 200 OK\nContent-Type: application/json\n\n"
+            gptel-openrouter-models-test--json-body)
+    (should (equal (mapcar (lambda (m) (alist-get 'id m))
+                           (gptel-openrouter-models--parse-buffer))
+                   '("openai/gpt-4o" "anthropic/claude-3.5-sonnet")))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-uses-url-http-marker ()
+  "When `url-http-end-of-headers' is set, it takes precedence."
+  (with-temp-buffer
+    (insert "GARBAGE-NOT-HEADERS")
+    (let ((marker (point-marker)))
+      (insert gptel-openrouter-models-test--json-body)
+      (defvar url-http-end-of-headers)
+      (let ((url-http-end-of-headers marker))
+        (should (equal (mapcar (lambda (m) (alist-get 'id m))
+                               (gptel-openrouter-models--parse-buffer))
+                       '("openai/gpt-4o" "anthropic/claude-3.5-sonnet")))))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-missing-terminator ()
+  "A response with no header terminator signals a clear error."
+  (with-temp-buffer
+    (insert "HTTP/1.1 200 OK just headers, no body separator")
+    (defvar url-http-end-of-headers)
+    (let ((url-http-end-of-headers nil))
+      (should-error (gptel-openrouter-models--parse-buffer)))))
+
+(ert-deftest gptel-openrouter-models-test-fetch-raw-errors-on-nil-buffer ()
+  "A nil return from `url-retrieve-synchronously' (timeout/failure) errors clearly."
+  (cl-letf (((symbol-function 'url-retrieve-synchronously)
+             (lambda (&rest _) nil)))
+    (let ((err (should-error (gptel-openrouter-models--fetch-raw) :type 'error)))
+      (should (string-match-p "timeout or connection failure"
+                              (error-message-string err))))))
+
 ;;; -list
 
 (ert-deftest gptel-openrouter-models-test-list-sorted-by-id ()

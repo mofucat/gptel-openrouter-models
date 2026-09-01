@@ -64,19 +64,35 @@ Defaults to `completions-annotations' (typically dimmed/italic), so the
 description is visually distinct from the model ID itself."
   :group 'gptel-openrouter-models)
 
+(defun gptel-openrouter-models--parse-buffer ()
+  "Parse the current buffer as an HTTP response from OpenRouter's /models.
+Move point past the response headers, then read the JSON body and
+return its `data' array (a list of alists).  Signal an error if the
+end of the headers cannot be located."
+  (goto-char (point-min))
+  (if (bound-and-true-p url-http-end-of-headers)
+      (goto-char url-http-end-of-headers)
+    ;; Fall back to finding the blank line between headers and body.
+    ;; Accept both CRLF ("\r\n\r\n", per RFC) and bare-LF ("\n\n")
+    ;; terminators.
+    (unless (re-search-forward "\r?\n\r?\n" nil t)
+      (error "gptel-openrouter-models: could not find end of HTTP headers")))
+  (let ((json-object-type 'alist)
+        (json-array-type 'list))
+    (alist-get 'data (json-read))))
+
 (defun gptel-openrouter-models--fetch-raw ()
   "Fetch OpenRouter's /models and return the data array (a list of alists)."
-  (with-current-buffer (url-retrieve-synchronously
-                         gptel-openrouter-models-endpoint
-                         t t gptel-openrouter-models-timeout)
-    (goto-char (point-min))
-    (unless (search-forward "\n\n" nil t)
-      (error "gptel-openrouter-models: could not find end of HTTP headers"))
-    (let* ((json-object-type 'alist)
-           (json-array-type 'list)
-           (parsed (json-read)))
-      (kill-buffer)
-      (alist-get 'data parsed))))
+  (let ((buffer (url-retrieve-synchronously
+                 gptel-openrouter-models-endpoint
+                 t t gptel-openrouter-models-timeout)))
+    (unless (buffer-live-p buffer)
+      (error "gptel-openrouter-models: could not fetch %s (timeout or connection failure)"
+             gptel-openrouter-models-endpoint))
+    (unwind-protect
+        (with-current-buffer buffer
+          (gptel-openrouter-models--parse-buffer))
+      (kill-buffer buffer))))
 
 (defun gptel-openrouter-models--id (model)
   "Extract the model ID from the MODEL alist."
