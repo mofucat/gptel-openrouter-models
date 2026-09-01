@@ -67,24 +67,63 @@ Defaults to `completions-annotations' (typically dimmed/italic), so the
 description is visually distinct from the model ID itself."
   :group 'gptel-openrouter-models)
 
+(defun gptel-openrouter-models--response-status ()
+  "Return the HTTP status code of the response in the current buffer, or nil.
+Prefer url-http's `url-http-response-status'; otherwise parse the
+status line at the top of the buffer."
+  (or (bound-and-true-p url-http-response-status)
+      (save-excursion
+        (goto-char (point-min))
+        (and (looking-at "HTTP/[0-9.]+ +\\([0-9]\\{3\\}\\)")
+             (string-to-number (match-string 1))))))
+
+(defun gptel-openrouter-models--error-detail (body raw)
+  "Return a human-readable error string from parsed BODY or RAW text.
+BODY is the JSON body parsed as an alist (or nil); RAW is the first
+chunk of the body as a string."
+  (or (and (consp body)
+           (let ((err (alist-get 'error body)))
+             (cond ((stringp err) err)
+                   ((consp err) (or (alist-get 'message err)
+                                    (alist-get 'code err)))
+                   (t (alist-get 'message body)))))
+      (let ((trimmed (string-trim (or raw ""))))
+        (unless (string-empty-p trimmed)
+          (truncate-string-to-width trimmed 200 nil nil t)))))
+
 (defun gptel-openrouter-models--parse-buffer ()
   "Parse the current buffer as an HTTP response from OpenRouter's /models.
 Move point past the response headers, then read the JSON body and
 return its `data' array (a list of alists).  Signal
-`gptel-openrouter-models-error' if the end of the headers cannot be
-located."
-  (goto-char (point-min))
-  (if (bound-and-true-p url-http-end-of-headers)
-      (goto-char url-http-end-of-headers)
-    ;; Fall back to finding the blank line between headers and body.
-    ;; Accept both CRLF ("\r\n\r\n", per RFC) and bare-LF ("\n\n")
-    ;; terminators.
-    (unless (re-search-forward "\r?\n\r?\n" nil t)
-      (signal 'gptel-openrouter-models-error
-              (list "could not find end of HTTP headers"))))
-  (let ((json-object-type 'alist)
-        (json-array-type 'list))
-    (alist-get 'data (json-read))))
+`gptel-openrouter-models-error' if the headers cannot be located, if
+the HTTP status is not 2xx, or if the body is not valid JSON."
+  (let ((status (gptel-openrouter-models--response-status)))
+    (goto-char (point-min))
+    (if (bound-and-true-p url-http-end-of-headers)
+        (goto-char url-http-end-of-headers)
+      ;; Fall back to finding the blank line between headers and body.
+      ;; Accept both CRLF ("\r\n\r\n", per RFC) and bare-LF ("\n\n")
+      ;; terminators.
+      (unless (re-search-forward "\r?\n\r?\n" nil t)
+        (signal 'gptel-openrouter-models-error
+                (list "could not find end of HTTP headers"))))
+    (let* ((raw (buffer-substring-no-properties
+                 (point) (min (point-max) (+ (point) 500))))
+           (json-object-type 'alist)
+           (json-array-type 'list)
+           ;; Wrap so we can tell "parsed to nil" from "failed to parse".
+           (parsed (condition-case nil (list (json-read)) (error nil)))
+           (body (car parsed)))
+      (when (and status (not (<= 200 status 299)))
+        (signal 'gptel-openrouter-models-error
+                (list (format "HTTP %d from %s: %s" status
+                              gptel-openrouter-models-endpoint
+                              (or (gptel-openrouter-models--error-detail body raw)
+                                  "unexpected response")))))
+      (unless parsed
+        (signal 'gptel-openrouter-models-error
+                (list "response body is not valid JSON")))
+      (alist-get 'data body))))
 
 (defun gptel-openrouter-models--fetch-raw ()
   "Fetch OpenRouter's /models and return the data array (a list of alists)."

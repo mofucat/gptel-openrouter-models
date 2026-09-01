@@ -121,6 +121,53 @@
       (should-error (gptel-openrouter-models--parse-buffer)
                     :type 'gptel-openrouter-models-error))))
 
+(ert-deftest gptel-openrouter-models-test-parse-buffer-429-json-error ()
+  "A 429 JSON error response surfaces the provider's message."
+  (with-temp-buffer
+    (insert "HTTP/1.1 429 Too Many Requests\r\n"
+            "Content-Type: application/json\r\n\r\n"
+            "{\"error\":{\"message\":\"Rate limit exceeded\",\"code\":429}}")
+    (defvar url-http-end-of-headers)
+    (let ((url-http-end-of-headers nil))
+      (let ((err (should-error (gptel-openrouter-models--parse-buffer)
+                               :type 'gptel-openrouter-models-error)))
+        (should (string-match-p "HTTP 429" (error-message-string err)))
+        (should (string-match-p "Rate limit exceeded"
+                                (error-message-string err)))))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-5xx-non-json-body ()
+  "A 5xx response with a non-JSON body still reports the status and a snippet."
+  (with-temp-buffer
+    (insert "HTTP/1.1 503 Service Unavailable\r\n\r\n"
+            "<html><body>upstream down</body></html>")
+    (defvar url-http-end-of-headers)
+    (let ((url-http-end-of-headers nil))
+      (let ((err (should-error (gptel-openrouter-models--parse-buffer)
+                               :type 'gptel-openrouter-models-error)))
+        (should (string-match-p "HTTP 503" (error-message-string err)))
+        (should (string-match-p "upstream down" (error-message-string err)))))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-uses-url-http-response-status ()
+  "`url-http-response-status' is honored when the status line is not in the buffer."
+  (with-temp-buffer
+    (insert "\r\n\r\n{\"data\":[{\"id\":\"openai/gpt-4o\"}]}")
+    (defvar url-http-end-of-headers)
+    (defvar url-http-response-status)
+    (let ((url-http-end-of-headers nil)
+          (url-http-response-status 200))
+      (should (equal (mapcar (lambda (m) (alist-get 'id m))
+                             (gptel-openrouter-models--parse-buffer))
+                     '("openai/gpt-4o"))))))
+
+(ert-deftest gptel-openrouter-models-test-parse-buffer-non-json-2xx ()
+  "A 2xx response whose body is not JSON signals a parse error."
+  (with-temp-buffer
+    (insert "HTTP/1.1 200 OK\r\n\r\nnot json at all")
+    (defvar url-http-end-of-headers)
+    (let ((url-http-end-of-headers nil))
+      (should-error (gptel-openrouter-models--parse-buffer)
+                    :type 'gptel-openrouter-models-error))))
+
 (ert-deftest gptel-openrouter-models-test-fetch-raw-errors-on-nil-buffer ()
   "A nil return from `url-retrieve-synchronously' (timeout/failure) errors clearly."
   (cl-letf (((symbol-function 'url-retrieve-synchronously)
