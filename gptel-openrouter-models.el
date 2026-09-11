@@ -325,6 +325,7 @@ moment you send anything."
 
 ;;;; Commands
 
+;;;###autoload
 (defun gptel-openrouter-models-list (&optional prefix force)
   "Fetch the OpenRouter model list and return it sorted by ID.
 If PREFIX is non-nil, keep only model IDs matching that prefix
