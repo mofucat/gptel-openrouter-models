@@ -1,6 +1,7 @@
 EMACS ?= emacs
 EL     = gptel-openrouter-models.el
 TEST   = gptel-openrouter-models-test.el
+STUB   = gptel-stub.el
 
 .PHONY: all test compile clean
 
@@ -14,7 +15,7 @@ test:
 compile:
 	$(EMACS) -Q --batch \
 	  --eval '(setq byte-compile-error-on-warn t)' \
-	  --eval "(unless (require 'gptel nil t) (defvar gptel-model nil) (provide 'gptel))" \
+	  -l $(STUB) \
 	  -f batch-byte-compile $(EL)
 
 clean:
