@@ -43,6 +43,13 @@ plain Emacs completion.
 
 ## Installation
 
+Requires Emacs 27.1+ and **gptel 0.9.8 or later**. The floor comes from
+the model metadata this package writes: gptel 0.9.5 made `gptel-model` a
+symbol and added capabilities/MIME types, 0.9.6 added the context window
+and pricing fields, and 0.9.8 added tool use and prompt caching. Older
+versions accept the model symbol and then ignore most of it, so the
+failure is silent rather than loud.
+
 ### straight.el + leaf
 
 ```elisp

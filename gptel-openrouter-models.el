@@ -2,8 +2,8 @@
 
 ;; Author: mofucat
 ;; URL: https://github.com/mofucat/gptel-openrouter-models
-;; Package-Requires: ((emacs "27.1") (gptel "0.9.0"))
-;; Version: 0.2.0
+;; Package-Requires: ((emacs "27.1") (gptel "0.9.8"))
+;; Version: 0.3.0
 ;; Keywords: convenience, tools
 ;; SPDX-License-Identifier: MIT
 
@@ -45,6 +45,15 @@
 ;;
 ;; Set up `gptel-backend' as a `gptel-make-openai' backend for
 ;; OpenRouter beforehand.  See README.md for details.
+;;
+;; gptel 0.9.8 or later is required, and the floor is set by the
+;; metadata this package writes rather than by any function it calls:
+;; 0.9.5 made `gptel-model' a symbol instead of a string and introduced
+;; :description / :capabilities / :mime-types, 0.9.6 added
+;; :context-window / :input-cost / :output-cost, and 0.9.8 added tool
+;; use and prompt caching, i.e. the `tool-use' and `cache' capability
+;; symbols.  On older versions the model symbol is accepted and then
+;; quietly ignored, which is worse than an error.
 
 ;;; Code:
 
@@ -235,10 +244,14 @@ An ID without a slash is returned unchanged."
 
 (defconst gptel-openrouter-models--mime-alist
   '(("image" "image/jpeg" "image/png" "image/gif" "image/webp")
-    ("file"  "application/pdf")
-    ("audio" "audio/mpeg" "audio/wav")
-    ("video" "video/mp4"))
-  "MIME types gptel can attach, per OpenRouter input modality.")
+    ("file"  "application/pdf"))
+  "MIME types gptel can attach, per OpenRouter input modality.
+
+OpenRouter also reports \"audio\" and \"video\" input modalities, but
+gptel's OpenAI-compatible request construction has no way to send those,
+so they are deliberately absent: listing them here would advertise an
+attachment type that fails at request time, which is worse than not
+offering it.  Add an entry once gptel grows support for the modality.")
 
 (defun gptel-openrouter-models--mime-types (model)
   "Return the MIME types MODEL accepts as input, as a list of strings."
@@ -272,6 +285,12 @@ prices as strings in dollars per token."
     (when (or (member "response_format" params)
               (member "structured_outputs" params))
       (push 'json caps))
+    ;; OpenRouter spells this either way depending on the provider:
+    ;; "reasoning" for models taking a reasoning config object,
+    ;; "include_reasoning" for the older boolean toggle.
+    (when (or (member "reasoning" params)
+              (member "include_reasoning" params))
+      (push 'reasoning caps))
     (when (> (gptel-openrouter-models--price model 'input_cache_read) 0)
       (push 'cache caps))
     (nreverse caps)))

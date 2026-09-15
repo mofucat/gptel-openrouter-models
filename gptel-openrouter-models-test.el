@@ -50,7 +50,7 @@
     (top_provider (context_length . 1000000)
                   (max_completion_tokens . 64000))
     (supported_parameters "tools" "response_format" "structured_outputs"
-                          "max_tokens" "temperature"))
+                          "reasoning" "max_tokens" "temperature"))
   "One full /models entry, shaped like OpenRouter's real payload.")
 
 (defmacro gptel-openrouter-models-test--with-models (models &rest body)
@@ -360,14 +360,32 @@ out as three Latin-1 characters."
                    "application/pdf")))
   ;; Text-only models get no MIME types at all.
   (should (null (gptel-openrouter-models--mime-types
-                 '((architecture (input_modalities "text")))))))
+                 '((architecture (input_modalities "text"))))))
+  ;; gptel cannot attach audio or video, so those modalities must not
+  ;; advertise a MIME type -- and without one the model gets no `media'
+  ;; capability either, which is the point.
+  (should (null (gptel-openrouter-models--mime-types
+                 '((architecture (input_modalities "text" "audio" "video"))))))
+  (should (null (gptel-openrouter-models--capabilities
+                 '((architecture (input_modalities "text" "audio" "video")))))))
 
 (ert-deftest gptel-openrouter-models-test-capabilities ()
   (should (equal (gptel-openrouter-models--capabilities
                   gptel-openrouter-models-test--full)
-                 '(media tool-use json cache)))
+                 '(media tool-use json reasoning cache)))
   (should (null (gptel-openrouter-models--capabilities
                  '((architecture (input_modalities "text")))))))
+
+(ert-deftest gptel-openrouter-models-test-capabilities-reasoning-spellings ()
+  "OpenRouter reports reasoning support under either of two parameter names."
+  (should (equal (gptel-openrouter-models--capabilities
+                  '((supported_parameters "reasoning")))
+                 '(reasoning)))
+  (should (equal (gptel-openrouter-models--capabilities
+                  '((supported_parameters "include_reasoning")))
+                 '(reasoning)))
+  (should (null (gptel-openrouter-models--capabilities
+                 '((supported_parameters "temperature"))))))
 
 (ert-deftest gptel-openrouter-models-test-context-window-in-thousands ()
   (should (= (gptel-openrouter-models--context-window
@@ -398,7 +416,7 @@ out as three Latin-1 characters."
   (let ((sym (gptel-openrouter-models--register
               gptel-openrouter-models-test--full)))
     (should (eq sym 'anthropic/claude-sonnet-4.5))
-    (should (equal (get sym :capabilities) '(media tool-use json cache)))
+    (should (equal (get sym :capabilities) '(media tool-use json reasoning cache)))
     (should (member "image/png" (get sym :mime-types)))
     (should (= (get sym :context-window) 1000))
     (should (= (get sym :input-cost) 3.0))
@@ -484,7 +502,7 @@ out as three Latin-1 characters."
       ;; ... and the model survives gptel's `gptel--sanitize-model'.
       (should (memq gptel-model (gptel-backend-models gptel-backend)))
       (should (equal (get gptel-model :capabilities)
-                     '(media tool-use json cache))))))
+                     '(media tool-use json reasoning cache))))))
 
 (ert-deftest gptel-openrouter-models-test-pick-noop-when-read-returns-nil ()
   (cl-letf (((symbol-function 'gptel-openrouter-models--read)
